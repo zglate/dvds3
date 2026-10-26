@@ -134,6 +134,10 @@ Add Source → **DVD screen saver**.
 | Color shift | Shifts the hue 45° on every bounce (not on macOS) |
 | Reset | Random position, random direction |
 
+Want several things bouncing as one (a logo plus a scrolling text, say)?
+Put them in a group in your scene, size the group, and pick the group as
+the Source. The copy in your scene stays put and keeps its own colour.
+
 ## Building from source
 
 It's the official [OBS plugin template](https://github.com/obsproject/obs-plugintemplate),
