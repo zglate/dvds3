@@ -1,0 +1,100 @@
+name: Linux package watch
+# The obsproject PPA publishes OBS for a new Ubuntu release later than the
+# Windows/macOS builds we pin. Until it carries OBS 33 for Ubuntu 26.04 the
+# Ubuntu build can't run, so releases may go out without a .deb. This checks
+# Launchpad on a schedule and, once OBS >= 33 is published for 26.04, builds
+# the Ubuntu package from the latest release's tag and attaches it to that
+# release. Once the asset is there it exits early on every later run.
+on:
+  schedule:
+    # 09:00 and 16:00 Pacific Daylight Time (cron is UTC; an hour earlier in PST).
+    - cron: '0 16,23 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  watch:
+    name: Check PPA and attach .deb
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Find the latest release and whether it already has a .deb
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          : Find the latest release and whether it already has a .deb
+          tag="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq .tagName 2>/dev/null || true)"
+          if [[ -z "${tag}" ]]; then
+            echo "No release yet; nothing to do."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          has_deb="$(gh release view --repo "${GITHUB_REPOSITORY}" "${tag}" --json assets --jq '[.assets[].name | select(endswith(".deb"))] | length')"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if (( has_deb > 0 )); then
+            echo "Release ${tag} already has a .deb; nothing to do."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check which OBS the PPA publishes for Ubuntu 26.04
+        id: ppa
+        if: steps.release.outputs.proceed == 'true'
+        run: |
+          : Check which OBS the PPA publishes for Ubuntu 26.04
+          api='https://api.launchpad.net/1.0/~obsproject/+archive/ubuntu/obs-studio'
+          series='https://api.launchpad.net/1.0/ubuntu/resolute/amd64'
+          version="$(curl -sf "${api}?ws.op=getPublishedBinaries&binary_name=obs-studio&exact_match=true&status=Published&distro_arch_series=${series}" \
+            | jq -r '.entries[].binary_package_version' | sort -V | tail -1)"
+          echo "PPA obs-studio for 26.04: ${version:-none}"
+          if [[ -n "${version}" ]] && dpkg --compare-versions "${version}" ge 33; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Not published yet; will check again."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.ppa.outputs.ready == 'true'
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Build Plugin 🧱
+        if: steps.ppa.outputs.ready == 'true'
+        uses: ./.github/actions/build-plugin
+        with:
+          target: x86_64
+          config: RelWithDebInfo
+
+      - name: Package Plugin 📀
+        if: steps.ppa.outputs.ready == 'true'
+        uses: ./.github/actions/package-plugin
+        with:
+          target: x86_64
+          config: RelWithDebInfo
+          package: true
+
+      - name: Attach the Linux package to the release 📎
+        if: steps.ppa.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          : Attach the Linux package to the release 📎
+          ls -l release/
+          files=()
+          for f in release/*.deb release/*.ddeb release/*.tar.xz; do
+            [[ -f "${f}" ]] && files+=("${f}")
+          done
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::No Linux package was produced."
+            exit 1
+          fi
+          gh release upload --repo "${GITHUB_REPOSITORY}" "${{ steps.release.outputs.tag }}" "${files[@]}" --clobber
