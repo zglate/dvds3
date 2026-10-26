@@ -35,6 +35,13 @@ if (( ! (${skips[(Ie)all]} + ${skips[(Ie)deps]}) )) {
     sudo apt-get install ${apt_args} gcc-${${target##*-}//_/-}-linux-gnu g++-${${target##*-}//_/-}-linux-gnu
   }
 
+  # The GitHub runner image prefers its Azure-internal mirror, which has been
+  # observed crawling at a few KB/s for 26.04 packages. Prefer the main archive.
+  if [[ -f /etc/apt/apt-mirrors.txt ]] {
+    printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:2\nhttps://security.ubuntu.com/ubuntu/\tpriority:3\n' \
+      | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+  }
+
   sudo add-apt-repository --yes ppa:obsproject/obs-studio
 
   # Ubuntu 26.04 images fetch only the archive's amd64v3 package indexes, and
