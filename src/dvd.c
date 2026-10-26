@@ -283,6 +283,8 @@ static bool link_external(struct dvd_source *context, const char *name)
 		return false;
 	}
 
+	context->link_refused = false;
+
 	struct obs_video_info ovi;
 	if (obs_get_video_info(&ovi)) {
 		context->base_cx = ovi.base_width;
@@ -599,8 +601,20 @@ static void dvd_source_tick(void *data, float seconds)
 	bool bounce = false;
 	double hue = 0.0;
 
-	if (!obs_source_showing(context->source))
+	if (!obs_source_showing(context->source)) {
+		/* Links are only maintained while showing, but a source the user
+		 * deleted must not be kept alive by our wrapper item meanwhile. */
+		pthread_mutex_lock(&context->mutex);
+		bool linked = context->wrapper_scene != NULL;
+		obs_source_t *ext = context->external ? obs_weak_source_get_source(context->external) : NULL;
+		pthread_mutex_unlock(&context->mutex);
+		if (linked && (!ext || obs_source_removed(ext))) {
+			drop_external(context);
+			context->relink_timer = 0.0f;
+		}
+		obs_source_release(ext);
 		return;
+	}
 
 	maintain_links(context, seconds);
 	measure_logo(context);
