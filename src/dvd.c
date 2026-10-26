@@ -218,6 +218,7 @@ static uint32_t dvd_source_getheight(void *data)
 
 static void dvd_source_render(void *data, gs_effect_t *effect)
 {
+	UNUSED_PARAMETER(effect);
 	struct dvd_source *context = data;
 	if (obs_source_showing(context->source)) {
 		obs_source_t *target = NULL;
@@ -281,19 +282,23 @@ static void dvd_source_tick(void *data, float seconds)
 
 bool use_color_shift_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *data)
 {
+	UNUSED_PARAMETER(props);
+	UNUSED_PARAMETER(p);
+	UNUSED_PARAMETER(data);
 	/* Returning true forces an update */
 	return true;
 }
 
 bool image_path_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *data)
 {
+	UNUSED_PARAMETER(p);
 	uint32_t cx = 0, cy = 0;
 
 	/* Since obs_source_getwidth reports old values, we
 	 * get the image size here every time a new file is loaded
 	 */
 	gs_image_file_t temp;
-	char *file = obs_data_get_string(data, "file");
+	const char *file = obs_data_get_string(data, "file");
 	gs_image_file_init(&temp, file);
 
 	obs_enter_graphics();
@@ -309,6 +314,8 @@ bool image_path_changed(obs_properties_t *props, obs_property_t *p, obs_data_t *
 }
 static bool reset_logo_position(obs_properties_t *props, obs_property_t *property, void *data)
 {
+	UNUSED_PARAMETER(props);
+	UNUSED_PARAMETER(property);
 	struct dvd_source *context = data;
 	context->pos.x = rand_limit(context->cx - context->img_cx);
 	context->pos.y = rand_limit(context->cx - context->img_cy);
@@ -345,7 +352,8 @@ static bool dvd_enum_global_sources(void *param, obs_source_t *current)
 
 static bool source_changed(obs_properties_t *props, obs_property_t *prop, obs_data_t *data)
 {
-	char *val = obs_data_get_string(data, S_SOURCE_ID);
+	UNUSED_PARAMETER(prop);
+	const char *val = obs_data_get_string(data, S_SOURCE_ID);
 	bool vis = strcmp(val, S_SOURCE_IMAGE) == 0;
 	obs_property_t *path = obs_properties_get(props, "file");
 
