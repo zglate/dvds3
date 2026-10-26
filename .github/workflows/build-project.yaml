@@ -181,6 +181,10 @@ jobs:
       matrix:
         os: [ubuntu-26.04]
     runs-on: ${{ matrix.os }}
+    # Temporary: the obsproject PPA has OBS 33 for 26.04 built but not yet
+    # published (Launchpad shows it Pending), and the build refuses anything
+    # older. Don't block releases on it; drop this once the PPA publishes.
+    continue-on-error: true
     needs: check-event
     defaults:
       run:

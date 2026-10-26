@@ -72,6 +72,12 @@ That puts it in OBS 33's plugin folders under `/usr`. The `.deb` is built on
 Ubuntu 26.04 against the PPA's OBS, so other Ubuntu/Debian versions and
 other distros: build from source (below) or unpack the `.deb` by hand.
 
+Heads up: if there's no `.deb` on the release yet, it's because the
+obsproject PPA hadn't published OBS 33 for 26.04 when the release was cut
+(CI refuses to build against anything older). It gets added as soon as the
+PPA catches up. Building from source against your own OBS 33 works
+meanwhile.
+
 ## Upgrading from 1.x
 
 The old versions lived somewhere OBS 33 flags as **Legacy** and, per the
