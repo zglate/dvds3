@@ -3,7 +3,7 @@
     "version": "2.0.0",
     "display_name": "DVD screen saver",
     "name": "dvd-screensaver",
-    "description": "A source that bounces a logo around the canvas, DVD-player style, shifting colour on every bounce.",
+    "description": "A source that bounces a logo around the canvas, DVD-player style, shifting color on every bounce.",
     "long_description": "Adds a \"DVD screen saver\" source type. The bouncing logo is the bundled DVD image, your own image file, or any other video source in the current scene collection. Maintained fork of univrsal/dvds3 for OBS Studio 33 and later.",
     "urls": {
         "repository": "https://github.com/zglate/dvds3",

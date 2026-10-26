@@ -64,9 +64,12 @@ refused to load the DLL and OBS switched the plugin off.
 - Windows ships as a zip instead of an installer. The installer in 1.x
   failed on launch because it looked for a license file by the wrong name
   (upstream issue #2).
-- Linux packages are built in CI (upstream issue #1).
-- `manifest.json` added so the Plugin Manager shows a name and version;
-  macOS bundle id is now `com.github.zglate.dvd-screensaver`.
+- Linux `.deb` built in CI alongside Windows and macOS.
+- `manifest.json` added, and the module now exports a name and
+  description, so the Plugin Manager and the log show "DVD screen saver"
+  instead of a blank; macOS bundle id is now
+  `com.github.zglate.dvd-screensaver`.
+- Locale text: "Speed (Pixel per second)" reads "Pixels per second".
 - Visible side effects of the fixes above, for completeness:
   - A bounce now lands exactly on the edge instead of stopping one step
     short of it.

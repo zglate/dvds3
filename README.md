@@ -28,9 +28,12 @@ If upstream starts moving again, use upstream.
 ## What you need
 
 *  **OBS Studio 33.0 or newer.** This build won't load in OBS 32 or older.
-   (For those, upstream's 1.1 release still works.)
+   (For those, upstream's 1.1 release is the one to use.)
 *  That's it. It's one small DLL and a data folder. No .NET, no Qt, no
    runtimes, nothing else to install.
+
+Upstream's own issue tracker lives at <https://git.vrsal.cc/alex/dvds3/issues>;
+anything about this fork goes to the tracker at the bottom of this page.
 
 ## Install
 
@@ -41,7 +44,8 @@ Grab the file for your OS from [Releases](https://github.com/zglate/dvds3/releas
 1.  Already have an older version? Remove it first - see
     [Upgrading from 1.x](#upgrading-from-1x).
 2.  Unzip the download. You'll get a `dvd-screensaver` folder with
-    `dvd-screensaver.dll` and a `data` folder inside it.
+    `dvd-screensaver.dll`, a `data` folder and a `.pdb` file (debug symbols,
+    harmless, helps if you ever send a crash report) inside it.
 3.  Drop that whole folder into `C:\ProgramData\obs-studio\plugins\` so you
     end up with
     `C:\ProgramData\obs-studio\plugins\dvd-screensaver\dvd-screensaver.dll`.
@@ -53,18 +57,20 @@ Grab the file for your OS from [Releases](https://github.com/zglate/dvds3/releas
 ### macOS
 
 Open the `.pkg` and follow the prompts. It isn't signed with an Apple
-Developer ID, so macOS will probably balk the first time: right-click the
-`.pkg`, pick **Open**, confirm. It installs to
+Developer ID, so the first open gets blocked: open **System Settings →
+Privacy & Security**, scroll down, click **Open Anyway**, then run the
+`.pkg` again. It installs to
 `~/Library/Application Support/obs-studio/plugins/`.
 
-### Linux (Ubuntu / Debian)
+### Linux (Ubuntu 26.04 x86_64, OBS from the obsproject PPA)
 
 ```
 sudo apt install ./dvd-screensaver-2.0.0-x86_64-linux-gnu.deb
 ```
 
-That puts it in OBS 33's plugin folders under `/usr`. Other distros: build
-from source (below) or unpack the `.deb` by hand.
+That puts it in OBS 33's plugin folders under `/usr`. The `.deb` is built on
+Ubuntu 26.04 against the PPA's OBS, so other Ubuntu/Debian versions and
+other distros: build from source (below) or unpack the `.deb` by hand.
 
 ## Upgrading from 1.x
 
@@ -82,7 +88,8 @@ stop loading. Remove the old copy before installing 2.0:
    **Legacy** is a copy still sitting in an old spot.
 
 Your scenes carry over as-is. The source type, its name and every setting are
-unchanged.
+unchanged. Which is also why you can't leave both installed: they register
+the same source, and OBS will only use one of them.
 
 One-time cleanup if you ever bounced another source: 1.x quietly stuck a
 colour filter called `dvd-filter` onto that source and OBS saved it with your
@@ -137,4 +144,6 @@ hit something.
 
 ## License
 
-GPL-2.0-or-later, same as upstream. Copyright univrsal. See `COPYING.txt`.
+GPL-2.0-or-later, same as upstream. Original code copyright univrsal; the
+changes in this fork copyright zglate, under the same license. See
+`COPYING.txt`.

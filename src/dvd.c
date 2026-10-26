@@ -11,7 +11,10 @@
  * GNU General Public License for more details.
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * github.com/univrsal/dvds3 (original), github.com/zglate/dvds3 (this fork)
+ *
+ * Original: github.com/univrsal/dvds3 (univrsal, 2019-2022).
+ * Modified 2026 by zglate for OBS Studio 33 (github.com/zglate/dvds3);
+ * see CHANGELOG.md for what changed.
  */
 
 #include <obs-module.h>
@@ -66,8 +69,10 @@
 #define HUE_MAX 180.0
 
 /* How often (seconds) to retry resolving an external source that does not
- * exist yet, e.g. because it comes later in the scene collection. */
+ * exist yet, and the slower rate used after a refusal (recursion), in case
+ * the user untangles it. */
 #define RELINK_INTERVAL 1.0f
+#define REFUSED_RETRY_INTERVAL 10.0f
 
 /* Threading
  *
@@ -89,6 +94,14 @@
  *    video thread publishes pointer swaps under it. The mutex is recursive
  *    because a tree walk started by this source can re-enter
  *    enum_active_sources on this same source.
+ *
+ * Links are only maintained while the source is showing. That also keeps
+ * the first link out of scene-collection loading: OBS creates all sources,
+ * then loads them (which is when scenes and groups add their items), and
+ * only then shows anything. Linking earlier could wrap a group that is
+ * about to contain this source, and the group would then drop our item as
+ * recursive. Between a swap and the matching activate/deactivate there are
+ * the same microsecond windows libobs' own scene code has.
  */
 struct dvd_source {
 	obs_source_t *source;
@@ -110,7 +123,8 @@ struct dvd_source {
 	/* Video-thread-only bookkeeping. */
 	obs_source_t *filter_host; /* which source color_filter is attached to */
 	float relink_timer;
-	bool link_refused; /* recursion: stop retrying until the setting changes */
+	bool link_refused;         /* recursion: retry slowly until the setting changes */
+	uint32_t base_cx, base_cy; /* OBS canvas size when the wrapper was linked */
 
 	/* Wanted state, written by update() (video thread) and load(). */
 	bool use_image;
@@ -118,11 +132,12 @@ struct dvd_source {
 	bool relink_requested; /* external_name changed, or load() asked for a retry */
 
 	bool use_color;
-	uint32_t cx, cy;     /* canvas size */
-	struct vec2 pos;     /* logo position */
-	int8_t d_x, d_y;     /* direction, -1 or 1 */
-	double scale, speed; /* logo scale, pixels per second */
-	double hue;          /* current hue shift in degrees */
+	uint32_t cx, cy;           /* box size */
+	uint32_t logo_cx, logo_cy; /* unscaled logo size as last measured by tick() */
+	struct vec2 pos;           /* logo position */
+	int8_t d_x, d_y;           /* direction, -1 or 1 */
+	double scale, speed;       /* logo scale, pixels per second */
+	double hue;                /* current hue shift in degrees */
 };
 
 struct enum_param {
@@ -247,7 +262,8 @@ static bool link_external(struct dvd_source *context, const char *name)
 	obs_sceneitem_t *item = obs_scene_add(scene, ext);
 
 	if (!item) {
-		warn("Can't use '%s', adding it to the wrapper scene failed", name);
+		if (!context->link_refused)
+			warn("Can't use '%s', adding it to the wrapper scene failed", name);
 		obs_scene_release(scene);
 		obs_source_release(ext);
 		context->link_refused = true;
@@ -257,13 +273,20 @@ static bool link_external(struct dvd_source *context, const char *name)
 
 	if (!obs_source_add_active_child(context->source, wrapper)) {
 		/* ext (or something inside it) contains this very source. */
-		warn("Can't use '%s', it would cause recursion", name);
+		if (!context->link_refused)
+			warn("Can't use '%s', it would cause recursion", name);
 		obs_sceneitem_remove(item);
 		obs_sceneitem_release(item);
 		obs_scene_release(scene);
 		obs_source_release(ext);
 		context->link_refused = true;
 		return false;
+	}
+
+	struct obs_video_info ovi;
+	if (obs_get_video_info(&ovi)) {
+		context->base_cx = ovi.base_width;
+		context->base_cy = ovi.base_height;
 	}
 
 	if (context->logo_active) {
@@ -318,12 +341,23 @@ static void maintain_links(struct dvd_source *context, float seconds)
 		drop_external(context);
 		linked = false;
 		context->relink_timer = 0.0f;
+	} else if (linked) {
+		/* The wrapper's item is placed relative to the OBS canvas, so a
+		 * resolution change moves and scales it. Relink to re-derive. */
+		struct obs_video_info ovi;
+		if (obs_get_video_info(&ovi) &&
+		    (ovi.base_width != context->base_cx || ovi.base_height != context->base_cy)) {
+			drop_external(context);
+			linked = false;
+			context->relink_timer = RELINK_INTERVAL;
+		}
 	}
 	obs_source_release(ext);
 
-	if (!linked && name && !context->link_refused) {
+	if (!linked && name) {
+		float interval = context->link_refused ? REFUSED_RETRY_INTERVAL : RELINK_INTERVAL;
 		context->relink_timer += seconds;
-		if (context->relink_timer >= RELINK_INTERVAL) {
+		if (context->relink_timer >= interval) {
 			context->relink_timer = 0.0f;
 			link_external(context, name);
 		}
@@ -339,23 +373,29 @@ static obs_source_t *get_render_target(struct dvd_source *context)
 	return target ? obs_source_get_ref(target) : NULL;
 }
 
-/* Unscaled size of the logo as drawn, i.e. after the source's own filters.
- * 0x0 when nothing is loaded. */
-static void get_logo_size(struct dvd_source *context, uint32_t *cx, uint32_t *cy)
+/* Measure the unscaled logo size as drawn, i.e. after the source's own
+ * filters, and cache it for reset_logo_position(). 0x0 when nothing is
+ * loaded. Video thread, mutex not held: another plugin's get_width could
+ * take locks we must not nest under ours. */
+static void measure_logo(struct dvd_source *context)
 {
-	*cx = 0;
-	*cy = 0;
-	if (context->use_image) {
-		*cx = obs_source_get_width(context->logo_source);
-		*cy = obs_source_get_height(context->logo_source);
-	} else if (context->external) {
-		obs_source_t *ext = obs_weak_source_get_source(context->external);
-		if (ext) {
-			*cx = obs_source_get_width(ext);
-			*cy = obs_source_get_height(ext);
-			obs_source_release(ext);
-		}
+	pthread_mutex_lock(&context->mutex);
+	obs_source_t *target = context->use_image
+				       ? obs_source_get_ref(context->logo_source)
+				       : (context->external ? obs_weak_source_get_source(context->external) : NULL);
+	pthread_mutex_unlock(&context->mutex);
+
+	uint32_t cx = 0, cy = 0;
+	if (target) {
+		cx = obs_source_get_width(target);
+		cy = obs_source_get_height(target);
+		obs_source_release(target);
 	}
+
+	pthread_mutex_lock(&context->mutex);
+	context->logo_cx = cx;
+	context->logo_cy = cy;
+	pthread_mutex_unlock(&context->mutex);
 }
 
 /* ---- settings ------------------------------------------------------------ */
@@ -483,16 +523,23 @@ static void dvd_source_destroy(void *data)
 	bfree(context);
 }
 
+/* Called from any thread (scene item transforms, UI), so read under the mutex. */
 static uint32_t dvd_source_get_width(void *data)
 {
 	struct dvd_source *context = data;
-	return context->cx;
+	pthread_mutex_lock(&context->mutex);
+	uint32_t cx = context->cx;
+	pthread_mutex_unlock(&context->mutex);
+	return cx;
 }
 
 static uint32_t dvd_source_get_height(void *data)
 {
 	struct dvd_source *context = data;
-	return context->cy;
+	pthread_mutex_lock(&context->mutex);
+	uint32_t cy = context->cy;
+	pthread_mutex_unlock(&context->mutex);
+	return cy;
 }
 
 /* ---- per-frame (video thread) -------------------------------------------- */
@@ -552,19 +599,17 @@ static void dvd_source_tick(void *data, float seconds)
 	bool bounce = false;
 	double hue = 0.0;
 
-	maintain_links(context, seconds);
-
 	if (!obs_source_showing(context->source))
 		return;
 
+	maintain_links(context, seconds);
+	measure_logo(context);
+
 	pthread_mutex_lock(&context->mutex);
 
-	uint32_t logo_cx, logo_cy;
-	get_logo_size(context, &logo_cx, &logo_cy);
-
-	if (logo_cx > 0 && logo_cy > 0) {
-		float w = (float)(logo_cx * context->scale);
-		float h = (float)(logo_cy * context->scale);
+	if (context->logo_cx > 0 && context->logo_cy > 0) {
+		float w = (float)(context->logo_cx * context->scale);
+		float h = (float)(context->logo_cy * context->scale);
 		float step = seconds * (float)context->speed;
 
 		bounce |= step_axis(&context->pos.x, &context->d_x, context->d_x * step, (float)context->cx - w);
@@ -597,10 +642,8 @@ static bool reset_logo_position(obs_properties_t *props, obs_property_t *propert
 	struct dvd_source *context = data;
 
 	pthread_mutex_lock(&context->mutex);
-	uint32_t logo_cx, logo_cy;
-	get_logo_size(context, &logo_cx, &logo_cy);
-	float w = (float)(logo_cx * context->scale);
-	float h = (float)(logo_cy * context->scale);
+	float w = (float)(context->logo_cx * context->scale);
+	float h = (float)(context->logo_cy * context->scale);
 	context->pos.x = rand_range((float)context->cx - w);
 	context->pos.y = rand_range((float)context->cy - h);
 	context->d_x = (rand() & 1) ? -1 : 1;
