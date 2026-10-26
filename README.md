@@ -41,6 +41,10 @@ Grab the file for your OS from [Releases](https://github.com/zglate/dvds3/releas
 
 ### Windows
 
+There's no installer any more, just a zip. The 1.x installer was the thing
+that broke for people (upstream issue #2), and a plugin that's one DLL and a
+data folder doesn't need one.
+
 1.  Already have an older version? Remove it first - see
     [Upgrading from 1.x](#upgrading-from-1x).
 2.  Unzip the download. You'll get a `dvd-screensaver` folder with
