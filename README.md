@@ -17,8 +17,8 @@ design and all of the original code are theirs:
 This repo is a maintenance fork, nothing more. OBS 33 removed a library
 function the old build relied on, so the plugin stopped loading, and upstream
 hasn't been touched since 2022. All I've done is get it loading again and fix
-the bugs that were in the way. Same source, same settings, same behaviour. No
-new features, on purpose.
+the bugs that were in the way. Same source, same settings, same look. No new
+features, on purpose. `CHANGELOG.md` lists every difference.
 
 Also thanks to [Ayowel](https://github.com/Ayowel), whose upstream pull
 request #3 is included here.
@@ -68,7 +68,8 @@ from source (below) or unpack the `.deb` by hand.
 
 ## Upgrading from 1.x
 
-The old versions lived somewhere OBS 33 flags as **Legacy** and OBS 34 will
+The old versions lived somewhere OBS 33 flags as **Legacy** and, per the
+[OBS project](https://obsproject.com/kb/legacy-plugin-locations), OBS 34 will
 stop loading. Remove the old copy before installing 2.0:
 
 *  **Installed with the old `.exe`?** Settings → Apps → Installed apps (or
@@ -77,8 +78,6 @@ stop loading. Remove the old copy before installing 2.0:
    `C:\Program Files\obs-studio\obs-plugins\64bit\dvd-screensaver.dll`
    (and the `.pdb` if it's there) plus the folder
    `C:\Program Files\obs-studio\data\obs-plugins\dvd-screensaver\`.
-   Also check `C:\ProgramData\obs-studio\plugins\dvd-screensaver\bin\` - the
-   other old layout - and delete that `dvd-screensaver` folder if it exists.
 *  **Not sure which?** Tools → Plugin Manager → Installed. A row marked
    **Legacy** is a copy still sitting in an old spot.
 
