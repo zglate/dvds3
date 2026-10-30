@@ -6,6 +6,9 @@ on:
       - master
       - main
       - 'release/**'
+    # Docs-only pushes don't need a three-platform build. (Ignored for tags.)
+    paths-ignore:
+      - '**.md'
     tags:
       - '*'
 permissions:
